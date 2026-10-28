@@ -4,7 +4,7 @@ Public dotfiles repo. These will generally be simplified versions of my everyday
 
 ## Installing
 
-Neovim (`~/.config/nvim/init.lua`):
+### Neovim: init.lua
 
 ```sh
 curl -fsSL --create-dirs -o ~/.config/nvim/init.lua https://raw.githubusercontent.com/harveyr/dotfiles-public/main/nvim/init.lua
