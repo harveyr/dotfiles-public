@@ -69,7 +69,6 @@ vim.o.list = true
 vim.o.listchars = "extends:…,nbsp:␣,precedes:…,tab:> "
 vim.o.number = true
 vim.o.pumheight = 10
-vim.o.pummaxwidth = 100
 vim.o.ruler = false
 vim.o.shortmess = "CFOSWaco"
 vim.o.showmode = false
