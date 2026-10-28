@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bootstrap portable dotfiles and essential CLI utilities (fzf, ripgrep).
+# Bootstrap portable dotfiles and essential CLI utilities (nvim, fzf, ripgrep).
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/harveyr/dotfiles-public/main/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/harveyr/dotfiles-public/main/install.sh | sh -s -- --no-bins
@@ -19,6 +19,8 @@ done
 if [ "${SKIP_BINS:-0}" = "1" ]; then
   INSTALL_BINS=0
 fi
+
+export PATH="$LOCAL_BIN:$PATH"
 
 log() {
   printf '[dotfiles] %s\n' "$*"
@@ -41,52 +43,30 @@ fetch() {
   fi
 }
 
-# ----------------------------------------------------------------------------
-# Place Neovim configuration
-# ----------------------------------------------------------------------------
-detect_nvim_dir() {
-  if [ -n "${NVIM_PROFILE:-}" ]; then
-    if [ "$NVIM_PROFILE" = "0.11" ]; then
-      printf 'nvim0.11'
-    else
-      printf 'nvim'
-    fi
-    return
+# Parse `nvim --version` into "major minor" (e.g. "0 11" or "0 12")
+get_nvim_version() {
+  if ! command -v nvim >/dev/null 2>&1; then
+    return 1
   fi
-
-  if command -v nvim >/dev/null 2>&1; then
-    ver=$(nvim --version 2>/dev/null | head -n 1 | sed -n 's/.*v\([0-9]*\)\.\([0-9]*\).*/\1 \2/p')
-    if [ -n "$ver" ]; then
-      major=$(printf '%s' "$ver" | awk '{print $1}')
-      minor=$(printf '%s' "$ver" | awk '{print $2}')
-      if [ "$major" -eq 0 ] && [ "$minor" -le 11 ]; then
-        printf 'nvim0.11'
-        return
-      fi
-    fi
+  ver=$(nvim --version 2>/dev/null | head -n 1 | sed -n 's/.*v\([0-9]*\)\.\([0-9]*\).*/\1 \2/p')
+  if [ -z "$ver" ]; then
+    return 1
   fi
-
-  printf 'nvim'
+  printf '%s' "$ver"
 }
 
-install_nvim_config() {
-  nvim_dir="$CONFIG_HOME/nvim"
-  target="$nvim_dir/init.lua"
-  profile=$(detect_nvim_dir)
-
-  mkdir -p "$nvim_dir"
-  if [ -f "$target" ]; then
-    backup="${target}.bak.$(date +%Y%m%d%H%M%S)"
-    cp "$target" "$backup"
-    log "backed up existing init.lua to $backup"
+nvim_is_at_least_011() {
+  ver=$(get_nvim_version) || return 1
+  major=$(printf '%s' "$ver" | awk '{print $1}')
+  minor=$(printf '%s' "$ver" | awk '{print $2}')
+  if [ "$major" -gt 0 ] || { [ "$major" -eq 0 ] && [ "$minor" -ge 11 ]; }; then
+    return 0
   fi
-
-  log "installing Neovim config ($profile/init.lua) -> $target"
-  fetch "$REPO_RAW/$profile/init.lua" "$target"
+  return 1
 }
 
 # ----------------------------------------------------------------------------
-# Best-effort utility installation (fzf, ripgrep)
+# Best-effort utility installation (nvim, fzf, ripgrep)
 # ----------------------------------------------------------------------------
 run_privileged() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -100,11 +80,11 @@ run_privileged() {
 
 try_pkg_install() {
   pkg="$1"
-  if command -v apt-get >/dev/null 2>&1; then
+  if command -v apk >/dev/null 2>&1; then
+    run_privileged apk add --no-cache "$pkg" >/dev/null 2>&1
+  elif command -v apt-get >/dev/null 2>&1; then
     run_privileged env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || return 1
     run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >/dev/null 2>&1
-  elif command -v apk >/dev/null 2>&1; then
-    run_privileged apk add --no-cache "$pkg" >/dev/null 2>&1
   elif command -v dnf >/dev/null 2>&1; then
     run_privileged dnf install -y -q "$pkg" >/dev/null 2>&1
   elif command -v brew >/dev/null 2>&1; then
@@ -112,6 +92,47 @@ try_pkg_install() {
   else
     return 1
   fi
+}
+
+install_nvim_tarball() {
+  os=$(uname -s)
+  arch=$(uname -m)
+
+  case "${os}:${arch}" in
+    Linux:x86_64)
+      asset="nvim-linux-x86_64"
+      ;;
+    Linux:aarch64 | Linux:arm64)
+      asset="nvim-linux-arm64"
+      ;;
+    Darwin:arm64)
+      asset="nvim-macos-arm64"
+      ;;
+    Darwin:x86_64)
+      asset="nvim-macos-x86_64"
+      ;;
+    *)
+      warn "unsupported platform for prebuilt Neovim tarball (${os}/${arch})"
+      return 1
+      ;;
+  esac
+
+  url="https://github.com/neovim/neovim/releases/latest/download/${asset}.tar.gz"
+  tmpdir=$(mktemp -d)
+  if fetch "$url" "$tmpdir/nvim.tar.gz" && tar -xzf "$tmpdir/nvim.tar.gz" -C "$tmpdir"; then
+    install_dir="$HOME/.local/$asset"
+    rm -rf "$install_dir"
+    mkdir -p "$HOME/.local" "$LOCAL_BIN"
+    mv "$tmpdir/$asset" "$install_dir"
+    ln -sf "$install_dir/bin/nvim" "$LOCAL_BIN/nvim"
+    rm -rf "$tmpdir"
+    if "$LOCAL_BIN/nvim" --version >/dev/null 2>&1; then
+      return 0
+    fi
+    rm -f "$LOCAL_BIN/nvim"
+  fi
+  rm -rf "$tmpdir"
+  return 1
 }
 
 install_fzf_fallback() {
@@ -167,7 +188,14 @@ install_rg_fallback() {
 }
 
 ensure_bins() {
-  export PATH="$LOCAL_BIN:$PATH"
+  if ! nvim_is_at_least_011; then
+    log "installing Neovim (>= 0.11)..."
+    if install_nvim_tarball || try_pkg_install neovim; then
+      log "Neovim installed ($(nvim --version 2>/dev/null | head -n 1))"
+    else
+      warn "could not install Neovim >= 0.11; continuing with existing setup"
+    fi
+  fi
 
   if ! command -v fzf >/dev/null 2>&1; then
     log "installing fzf..."
@@ -188,6 +216,47 @@ ensure_bins() {
   fi
 }
 
+# ----------------------------------------------------------------------------
+# Place Neovim configuration (runs after Neovim binary is present)
+# ----------------------------------------------------------------------------
+detect_nvim_dir() {
+  if [ -n "${NVIM_PROFILE:-}" ]; then
+    if [ "$NVIM_PROFILE" = "0.11" ]; then
+      printf 'nvim0.11'
+    else
+      printf 'nvim'
+    fi
+    return
+  fi
+
+  if ver=$(get_nvim_version); then
+    major=$(printf '%s' "$ver" | awk '{print $1}')
+    minor=$(printf '%s' "$ver" | awk '{print $2}')
+    if [ "$major" -eq 0 ] && [ "$minor" -le 11 ]; then
+      printf 'nvim0.11'
+      return
+    fi
+  fi
+
+  printf 'nvim'
+}
+
+install_nvim_config() {
+  nvim_dir="$CONFIG_HOME/nvim"
+  target="$nvim_dir/init.lua"
+  profile=$(detect_nvim_dir)
+
+  mkdir -p "$nvim_dir"
+  if [ -f "$target" ]; then
+    backup="${target}.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$target" "$backup"
+    log "backed up existing init.lua to $backup"
+  fi
+
+  log "installing Neovim config ($profile/init.lua) -> $target"
+  fetch "$REPO_RAW/$profile/init.lua" "$target"
+}
+
 prewarm_nvim() {
   if command -v nvim >/dev/null 2>&1; then
     log "syncing Neovim plugins headlessly..."
@@ -195,9 +264,9 @@ prewarm_nvim() {
   fi
 }
 
-install_nvim_config
 if [ "$INSTALL_BINS" -eq 1 ]; then
   ensure_bins
 fi
+install_nvim_config
 prewarm_nvim
 log "done"

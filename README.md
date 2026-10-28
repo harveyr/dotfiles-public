@@ -4,7 +4,7 @@ Public dotfiles repo. These will generally be simplified versions of my everyday
 
 ## Installing
 
-### Bootstrap (auto-detects Neovim version + installs `fzf` & `ripgrep`)
+### Bootstrap (installs `nvim`, `fzf`, `ripgrep` + places matching config)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/harveyr/dotfiles-public/main/install.sh | sh
