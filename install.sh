@@ -264,9 +264,37 @@ prewarm_nvim() {
   fi
 }
 
+configure_shell_rc() {
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile"; do
+    if [ -f "$rc" ]; then
+      if grep -Eq '^[[:space:]]*(export[[:space:]]+)?EDITOR=' "$rc"; then
+        tmp=$(mktemp)
+        sed -E 's|^[[:space:]]*(export[[:space:]]+)?EDITOR=.*|export EDITOR="nvim"|' "$rc" > "$tmp"
+        mv "$tmp" "$rc"
+      else
+        printf '\nexport EDITOR="nvim"\n' >> "$rc"
+      fi
+      log "configured EDITOR=nvim in $rc"
+    fi
+  done
+
+  fish_rc="$CONFIG_HOME/fish/config.fish"
+  if [ -f "$fish_rc" ]; then
+    if grep -Eq '^[[:space:]]*set[[:space:]]+-[a-zA-Z]*x[a-zA-Z]*[[:space:]]+EDITOR[[:space:]]' "$fish_rc"; then
+      tmp=$(mktemp)
+      sed -E 's|^[[:space:]]*set[[:space:]]+-[a-zA-Z]*x[a-zA-Z]*[[:space:]]+EDITOR[[:space:]].*|set -gx EDITOR nvim|' "$fish_rc" > "$tmp"
+      mv "$tmp" "$fish_rc"
+    else
+      printf '\nset -gx EDITOR nvim\n' >> "$fish_rc"
+    fi
+    log "configured EDITOR=nvim in $fish_rc"
+  fi
+}
+
 if [ "$INSTALL_BINS" -eq 1 ]; then
   ensure_bins
 fi
 install_nvim_config
+configure_shell_rc
 prewarm_nvim
 log "done"
