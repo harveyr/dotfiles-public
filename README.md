@@ -16,15 +16,11 @@ Config only (skip binary installation):
 curl -fsSL https://raw.githubusercontent.com/harveyr/dotfiles-public/main/install.sh | sh -s -- --no-bins
 ```
 
-### Direct file download (Neovim v0.12+)
+### Direct file download (examples)
 
 ```sh
 curl -fsSL --create-dirs -o ~/.config/nvim/init.lua https://raw.githubusercontent.com/harveyr/dotfiles-public/main/nvim/init.lua
-```
 
-### Neovim v0.11-
-
-```sh
 curl -fsSL --create-dirs -o ~/.config/nvim/init.lua https://raw.githubusercontent.com/harveyr/dotfiles-public/refs/heads/main/nvim0.11/init.lua
 ```
 
