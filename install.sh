@@ -257,10 +257,26 @@ install_nvim_config() {
   fetch "$REPO_RAW/$profile/init.lua" "$target"
 }
 
-prewarm_nvim() {
+install_vim_config() {
+  target="$HOME/.vimrc"
+  if [ -f "$target" ]; then
+    backup="${target}.bak.$(date +%Y%m%d%H%M%S)"
+    cp "$target" "$backup"
+    log "backed up existing .vimrc to $backup"
+  fi
+
+  log "installing Vim config (vim/vimrc) -> $target"
+  fetch "$REPO_RAW/vim/vimrc" "$target"
+}
+
+prewarm_editors() {
   if command -v nvim >/dev/null 2>&1; then
     log "syncing Neovim plugins headlessly..."
-    nvim --headless +qall >/dev/null 2>&1 || warn "headless plugin sync exited non-zero"
+    nvim --headless +qall >/dev/null 2>&1 || warn "headless Neovim plugin sync exited non-zero"
+  fi
+  if command -v vim >/dev/null 2>&1 && [ -f "$HOME/.vimrc" ]; then
+    log "syncing Vim plugins headlessly..."
+    vim -Nu "$HOME/.vimrc" -es -c "qall!" >/dev/null 2>&1 || warn "headless Vim plugin sync exited non-zero"
   fi
 }
 
@@ -295,6 +311,7 @@ if [ "$INSTALL_BINS" -eq 1 ]; then
   ensure_bins
 fi
 install_nvim_config
+install_vim_config
 configure_shell_rc
-prewarm_nvim
+prewarm_editors
 log "done"
