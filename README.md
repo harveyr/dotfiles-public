@@ -22,5 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/harveyr/dotfiles-public/main/instal
 curl -fsSL --create-dirs -o ~/.config/nvim/init.lua https://raw.githubusercontent.com/harveyr/dotfiles-public/main/nvim/init.lua
 
 curl -fsSL --create-dirs -o ~/.config/nvim/init.lua https://raw.githubusercontent.com/harveyr/dotfiles-public/refs/heads/main/nvim0.11/init.lua
+
+curl -fsSL -o ~/.vimrc https://raw.githubusercontent.com/harveyr/dotfiles-public/main/vim/vimrc
 ```
 

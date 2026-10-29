@@ -1,0 +1,368 @@
+" ============================================================================
+" Standalone Portable Vim Configuration (Single-File)
+" Usage:
+"   curl -fsSL -o ~/.vimrc https://raw.githubusercontent.com/harveyr/dotfiles-public/main/vim/vimrc
+"   Or test directly: vim -u /path/to/vimrc
+" ============================================================================
+
+set nocompatible
+
+" Leader key
+let mapleader = " "
+nnoremap <SPACE> <Nop>
+
+" ----------------------------------------------------------------------------
+" Native Package Bootstrap (Vim 8+ pack/plugins/start, best-effort)
+" ----------------------------------------------------------------------------
+let s:pack_dir = expand('~/.vim/pack/plugins/start')
+let s:plugins = [
+      \ ['gruvbox-community/gruvbox', 'gruvbox'],
+      \ ['junegunn/fzf', 'fzf'],
+      \ ['junegunn/fzf.vim', 'fzf.vim'],
+      \ ['tpope/vim-surround', 'vim-surround'],
+      \ ['tpope/vim-commentary', 'vim-commentary'],
+      \ ['tpope/vim-repeat', 'vim-repeat'],
+      \ ['tpope/vim-vinegar', 'vim-vinegar'],
+      \ ['christoomey/vim-tmux-navigator', 'vim-tmux-navigator'],
+      \ ]
+
+if executable('git') && !isdirectory(s:pack_dir)
+  call mkdir(s:pack_dir, 'p')
+  for [s:repo, s:name] in s:plugins
+    let s:dest = s:pack_dir . '/' . s:name
+    if !isdirectory(s:dest)
+      echom 'Installing ' . s:name . '...'
+      call system('git clone --depth 1 https://github.com/' . s:repo . '.git ' . shellescape(s:dest))
+    endif
+  endfor
+  silent! packloadall
+  silent! helptags ALL
+endif
+
+" ----------------------------------------------------------------------------
+" Filetype and Syntax
+" ----------------------------------------------------------------------------
+augroup filetypedetect_custom
+  autocmd!
+  autocmd BufRead,BufNewFile *.toml.tmpl set filetype=toml
+  autocmd BufRead,BufNewFile *ssh/config.tmpl set filetype=sshconfig
+augroup END
+
+filetype plugin indent on
+syntax on
+
+" ----------------------------------------------------------------------------
+" General Options
+" ----------------------------------------------------------------------------
+set encoding=utf-8
+set hidden
+set noswapfile
+set nobackup
+set updatetime=300
+set mouse=
+
+" Persistent undo (auto-create directory)
+let s:undo_dir = expand('~/.vim/undo')
+if !isdirectory(s:undo_dir)
+  silent! call mkdir(s:undo_dir, 'p', 0700)
+endif
+if isdirectory(s:undo_dir) && has('persistent_undo')
+  let &undodir = s:undo_dir . '//'
+  set undofile
+endif
+
+" Autoread external changes
+set autoread
+augroup autoread_check
+  autocmd!
+  autocmd BufEnter,FocusGained * silent! checktime
+augroup END
+
+" Soft wrap & formatting
+set textwidth=0
+set wrapmargin=0
+set wrap
+set linebreak
+if exists('+breakindent')
+  set breakindent
+  silent! set breakindentopt=list:-1
+endif
+let &formatlistpat = '^\s*[0-9\-\+\*]\+[\.\)]*\s\+'
+set formatoptions=rqnl1j
+
+" Folding
+let g:markdown_folding = 1
+set foldmethod=indent
+set foldlevel=99
+set foldnestmax=10
+
+" Spell checking
+set nospell
+set spelllang=en_us
+set spellfile=~/.vim/spell/en.utf-8.add
+silent! set spelloptions=camel
+
+" UI and layout
+set number
+set scrolloff=8
+set pumheight=10
+set noruler
+set noshowmode
+set splitbelow
+set splitright
+if exists('+splitkeep')
+  silent! set splitkeep=screen
+endif
+if exists('+signcolumn')
+  set signcolumn=yes
+endif
+if exists('+termguicolors')
+  set termguicolors
+endif
+set list
+let &listchars = "extends:\u2026,nbsp:\u2423,precedes:\u2026,tab:> "
+let &fillchars = "eob: ,fold:\u254c"
+
+" Undercurl & cursor shape escape sequences in terminal Vim
+let &t_Cs = "\e[4:3m"
+let &t_Ce = "\e[4:0m"
+let &t_SI = "\e[5 q"
+let &t_SR = "\e[4 q"
+let &t_EI = "\e[2 q"
+
+" Colorscheme (gruvbox with built-in fallback)
+set background=dark
+let g:gruvbox_guisp_fallback = 'fg'
+augroup colorscheme_tweaks
+  autocmd!
+  autocmd ColorScheme gruvbox highlight SpellBad cterm=undercurl,underline gui=undercurl,underline guisp=#fb4934 guifg=#fb4934
+augroup END
+silent! packadd! gruvbox
+try
+  colorscheme gruvbox
+catch
+  silent! colorscheme habamax
+endtry
+
+" Search and completion
+set nohlsearch
+set incsearch
+set ignorecase
+set smartcase
+set infercase
+set showmatch
+set wildmenu
+silent! set wildoptions=fuzzy,pum
+set complete=.,w,b,kspell
+silent! set completeopt=menuone,noselect
+set path+=**
+set wildignore+=**/.git/**,**/node_modules/**,**/target/**,**/.venv/**
+
+" Indentation
+set autoindent
+set smartindent
+set smarttab
+set expandtab
+set shiftround
+set tabstop=2
+set softtabstop=2
+set shiftwidth=2
+set virtualedit=block
+
+" ----------------------------------------------------------------------------
+" Filetype Rules
+" ----------------------------------------------------------------------------
+function! s:ToggleMarkdownCheckbox() abort
+  let l:line = getline('.')
+  if l:line =~# '^\s*- \[ \] '
+    call setline('.', substitute(l:line, '- \[ \] ', '- [x] ', ''))
+  elseif l:line =~# '^\s*- \[x\] '
+    call setline('.', substitute(l:line, '- \[x\] ', '- [ ] ', ''))
+  elseif l:line =~# '^\s*- '
+    call setline('.', substitute(l:line, '- ', '- [ ] ', ''))
+  endif
+endfunction
+command! CheckboxToggle call s:ToggleMarkdownCheckbox()
+
+augroup ftplugin_inline
+  autocmd!
+  autocmd FileType python,fish,sh,bash setlocal expandtab tabstop=4 shiftwidth=4 softtabstop=4
+  autocmd FileType markdown setlocal formatoptions-=t spell wrap
+  autocmd FileType markdown nnoremap <buffer> <silent> <expr> k v:count == 0 ? 'gk' : 'k'
+  autocmd FileType markdown nnoremap <buffer> <silent> <expr> j v:count == 0 ? 'gj' : 'j'
+  autocmd FileType markdown nnoremap <buffer> <silent> <leader><CR> :CheckboxToggle<CR>
+  autocmd FileType markdown syntax match markdownHighlight /==.\{-}==/
+  autocmd FileType markdown highlight markdownHighlight ctermbg=237 ctermfg=214 guibg=#3c3836 guifg=#fabd2f cterm=bold gui=bold
+augroup END
+
+" ----------------------------------------------------------------------------
+" Remote Clipboard (OSC 52 copy on yank)
+" ----------------------------------------------------------------------------
+function! CopyOsc52() abort
+  if v:event.operator !=# 'y'
+    return
+  endif
+  let l:text = getreg(v:event.regname)
+  if empty(l:text)
+    return
+  endif
+  let l:b64 = system('base64 | tr -d "\r\n"', l:text)
+  let l:esc = "\e]52;c;" . l:b64 . "\x07"
+  if !empty($TMUX)
+    let l:esc = "\ePtmux;\e" . substitute(l:esc, "\e", "\e\e", "g") . "\e\\"
+  endif
+  if exists('*echoraw')
+    call echoraw(l:esc)
+  elseif filewritable('/dev/tty')
+    call writefile([l:esc], '/dev/tty', 'b')
+  endif
+endfunction
+
+if !empty($SSH_CONNECTION) || !empty($SSH_TTY) || !empty($SSH_CLIENT) || !empty($TMUX)
+  augroup osc52_yank
+    autocmd!
+    autocmd TextYankPost * call CopyOsc52()
+  augroup END
+endif
+
+" ----------------------------------------------------------------------------
+" Custom Commands & Helpers
+" ----------------------------------------------------------------------------
+function! s:YankPath() abort
+  let l:path = expand('%:p')
+  if empty(l:path)
+    echohl WarningMsg | echom 'Current buffer is not a file.' | echohl None
+    return
+  endif
+  silent! let @+ = l:path
+  let @" = l:path
+  if !empty($SSH_CONNECTION) || !empty($SSH_TTY) || !empty($SSH_CLIENT) || !empty($TMUX)
+    let v:event = {'operator': 'y', 'regname': '"'}
+    call CopyOsc52()
+  endif
+  echom 'Yanked: ' . l:path
+endfunction
+
+function! s:YankBuffer() abort
+  let l:content = join(getline(1, '$'), "\n")
+  silent! let @+ = l:content
+  let @" = l:content
+  if !empty($SSH_CONNECTION) || !empty($SSH_TTY) || !empty($SSH_CLIENT) || !empty($TMUX)
+    let v:event = {'operator': 'y', 'regname': '"'}
+    call CopyOsc52()
+  endif
+  echom 'Buffer copied to clipboard!'
+endfunction
+
+function! s:TrimTrailspace() abort
+  let l:view = winsaveview()
+  silent! keeppatterns %s/\s\+$//e
+  call winrestview(l:view)
+endfunction
+
+command! YankPath call s:YankPath()
+command! YankBufferToClipboard call s:YankBuffer()
+
+" ----------------------------------------------------------------------------
+" Keymaps
+" ----------------------------------------------------------------------------
+
+" Saving
+nnoremap <C-s> :silent! update <Bar> redraw<CR>
+xnoremap <C-s> :<C-u>silent! update <Bar> redraw<CR>
+inoremap <C-s> <Esc>:write<CR>
+
+" Clipboard
+nnoremap gy "+y
+xnoremap gy "+y
+nnoremap <leader>y "+y
+xnoremap <leader>y "+y
+nnoremap gp "+p
+xnoremap gp "+P
+nnoremap <leader>by :YankBufferToClipboard<CR>
+nnoremap <leader>bp :YankPath<CR>
+
+" Visual selection helpers
+nnoremap <expr> gV "`[" . strpart(getregtype(), 0, 1) . "`]"
+xnoremap g/ <Esc>/\%V
+
+" Buffers
+nnoremap <leader>ba :b#<CR>
+nnoremap <leader>bo :b#<CR>
+nnoremap <leader>bd :bdelete<CR>
+nnoremap <leader>bD :bdelete!<CR>
+nnoremap <leader>bw :bwipeout<CR>
+nnoremap <leader>bW :bwipeout!<CR>
+nnoremap <leader>bs :enew <Bar> setlocal buftype=nofile bufhidden=hide noswapfile<CR>
+nnoremap <leader>bt :call <SID>TrimTrailspace()<CR>
+nnoremap <C-_> <C-^>
+inoremap <C-_> <Esc><C-^>
+
+" Explore & Netrw / Vinegar
+let g:NERDTreeHijackNetrw = 0
+let g:netrw_banner = 0
+let g:netrw_silent = 1
+nnoremap - :Explore<CR>
+nnoremap <leader>ed :Explore .<CR>
+nnoremap <leader>ef :Explore<CR>
+nnoremap <leader>ei :edit $MYVIMRC<CR>
+nnoremap <leader>eq :botright copen<CR>
+nnoremap <leader>eQ :botright lopen<CR>
+
+" Find (FZF if loaded, native fallback otherwise)
+let g:fzf_layout = { 'window': { 'width': 0.9, 'height': 0.7 } }
+let g:fzf_preview_window = ['right,50%', 'ctrl-/']
+
+function! s:FzfOrFallback(fzf_cmd, fallback_cmd) abort
+  if exists(':' . a:fzf_cmd) == 2
+    execute a:fzf_cmd
+  else
+    call feedkeys(a:fallback_cmd, 'n')
+  endif
+endfunction
+
+nnoremap <leader>ff :call <SID>FzfOrFallback('Files', ':find ')<CR>
+nnoremap <leader>fg :call <SID>FzfOrFallback('Rg', ':vimgrep // **/*')<CR>
+nnoremap <leader>fb :call <SID>FzfOrFallback('Buffers', ':buffer ')<CR>
+nnoremap <leader>fh :call <SID>FzfOrFallback('Helptags', ':help ')<CR>
+nnoremap <leader>fo :call <SID>FzfOrFallback('History', ":browse oldfiles\<CR>")<CR>
+nnoremap <leader>fl :call <SID>FzfOrFallback('BLines', '/')<CR>
+nnoremap <leader>fL :call <SID>FzfOrFallback('Lines', '/')<CR>
+nnoremap <leader>fm :call <SID>FzfOrFallback('Marks', ":marks\<CR>")<CR>
+nnoremap <leader>fc :call <SID>FzfOrFallback('Commits', ":!git log --oneline -n 20\<CR>")<CR>
+nnoremap <leader>fe :call <SID>FzfOrFallback('Colors', ':colorscheme ')<CR>
+
+" Tmux / Window Navigation
+let g:tmux_navigator_no_mappings = 1
+set ttimeout
+set ttimeoutlen=50
+if !has('nvim')
+  silent! execute "set <M-h>=\<Esc>h"
+  silent! execute "set <M-j>=\<Esc>j"
+  silent! execute "set <M-k>=\<Esc>k"
+  silent! execute "set <M-l>=\<Esc>l"
+  silent! execute "set <M-\\>=\<Esc>\\"
+endif
+
+function! s:TmuxOrWinNav(tmux_cmd, wincmd_key) abort
+  if exists(':' . a:tmux_cmd) == 2
+    execute a:tmux_cmd
+  else
+    execute 'wincmd ' . a:wincmd_key
+  endif
+endfunction
+
+nnoremap <silent> <M-h> :<C-U>call <SID>TmuxOrWinNav('TmuxNavigateLeft', 'h')<CR>
+nnoremap <silent> <M-j> :<C-U>call <SID>TmuxOrWinNav('TmuxNavigateDown', 'j')<CR>
+nnoremap <silent> <M-k> :<C-U>call <SID>TmuxOrWinNav('TmuxNavigateUp', 'k')<CR>
+nnoremap <silent> <M-l> :<C-U>call <SID>TmuxOrWinNav('TmuxNavigateRight', 'l')<CR>
+nnoremap <silent> <M-\> :<C-U>call <SID>TmuxOrWinNav('TmuxNavigatePrevious', 'p')<CR>
+
+inoremap <silent> <M-h> <Esc>:<C-U>call <SID>TmuxOrWinNav('TmuxNavigateLeft', 'h')<CR>
+inoremap <silent> <M-j> <Esc>:<C-U>call <SID>TmuxOrWinNav('TmuxNavigateDown', 'j')<CR>
+inoremap <silent> <M-k> <Esc>:<C-U>call <SID>TmuxOrWinNav('TmuxNavigateUp', 'k')<CR>
+inoremap <silent> <M-l> <Esc>:<C-U>call <SID>TmuxOrWinNav('TmuxNavigateRight', 'l')<CR>
+inoremap <silent> <M-\> <Esc>:<C-U>call <SID>TmuxOrWinNav('TmuxNavigatePrevious', 'p')<CR>
+
+" Reload config
+nnoremap <leader>r :source $MYVIMRC <Bar> echom "Config reloaded!"<CR>
